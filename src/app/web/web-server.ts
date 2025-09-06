@@ -77,7 +77,7 @@ export class WebServerManager {
 			...process.env,
 			PORT: this.config.port.toString(),
 			HOSTNAME: this.config.host || 'localhost',
-			...(this.config.apiUrl && { API_URL: this.config.apiUrl }),
+			...(this.config.apiUrl && { NEXT_PUBLIC_API_URL: this.config.apiUrl }),
 			...(this.config.wsUrl && { NEXT_PUBLIC_WS_URL: this.config.wsUrl }),
 			// Extract port from API URL for Next.js rewrite rules
 			...(this.config.apiUrl && { API_PORT: new URL(this.config.apiUrl).port || '3001' }),
@@ -106,7 +106,7 @@ export class WebServerManager {
 		const env = {
 			...process.env,
 			PORT: this.config.port.toString(),
-			...(this.config.apiUrl && { API_URL: this.config.apiUrl }),
+			...(this.config.apiUrl && { NEXT_PUBLIC_API_URL: this.config.apiUrl }),
 			...(this.config.wsUrl && { NEXT_PUBLIC_WS_URL: this.config.wsUrl }),
 			// Extract port from API URL for Next.js rewrite rules
 			...(this.config.apiUrl && { API_PORT: new URL(this.config.apiUrl).port || '3001' }),
