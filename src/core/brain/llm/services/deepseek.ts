@@ -1,6 +1,6 @@
 import { ToolSet } from '../../../mcp/types.js';
 import { MCPManager } from '../../../mcp/manager.js';
-import { UnifiedToolManager, CombinedToolSet } from '../../tools/unified-tool-manager.js';
+import { CombinedToolSet, UnifiedToolManager } from '../../tools/unified-tool-manager.js';
 import { ContextManager } from '../messages/manager.js';
 import { ImageData } from '../messages/types.js';
 import { ILLMService, LLMServiceConfig } from './types.js';
@@ -11,7 +11,7 @@ import { EventManager } from '../../../events/event-manager.js';
 import { SessionEvents } from '../../../events/event-types.js';
 import { v4 as uuidv4 } from 'uuid';
 
-export class OpenAIService implements ILLMService {
+export class DeepseekService implements ILLMService {
 	private openai: OpenAI;
 	private model: string;
 	private mcpManager: MCPManager;
@@ -19,7 +19,6 @@ export class OpenAIService implements ILLMService {
 	private contextManager: ContextManager;
 	private maxIterations: number;
 	private eventManager?: EventManager;
-
 	constructor(
 		openai: OpenAI,
 		model: string,
@@ -35,14 +34,6 @@ export class OpenAIService implements ILLMService {
 		this.contextManager = contextManager;
 		this.maxIterations = maxIterations;
 	}
-
-	/**
-	 * Set the event manager for emitting LLM response events
-	 */
-	setEventManager(eventManager: EventManager): void {
-		this.eventManager = eventManager;
-	}
-
 	async generate(userInput: string, imageData?: ImageData): Promise<string> {
 		await this.contextManager.addUserMessage(userInput, imageData);
 
@@ -65,10 +56,10 @@ export class OpenAIService implements ILLMService {
 		// Use unified tool manager if available, otherwise fall back to MCP manager
 		let formattedTools: any[];
 		if (this.unifiedToolManager) {
-			formattedTools = await this.unifiedToolManager.getToolsForProvider('openai');
+			formattedTools = await this.unifiedToolManager.getToolsForProvider('deepseek');
 		} else {
 			const rawTools = await this.mcpManager.getAllTools();
-			formattedTools = this.formatToolsForOpenAI(rawTools);
+			formattedTools = this.formatToolsForDeepseek(rawTools);
 		}
 
 		let iterationCount = 0;
@@ -120,7 +111,6 @@ export class OpenAIService implements ILLMService {
 
 				// Handle tool calls
 				for (const toolCall of message.tool_calls) {
-					// DEBUG
 					logger.debug(`Tool call initiated: ${JSON.stringify(toolCall, null, 2)}`);
 					logger.info(`🔧 Using tool: ${toolCall.function.name}`);
 					const toolName = toolCall.function.name;
@@ -144,6 +134,7 @@ export class OpenAIService implements ILLMService {
 						} else {
 							result = await this.mcpManager.executeTool(toolName, args);
 						}
+
 						// Display formatted tool result
 						const formattedResult = formatToolResult(toolName, result);
 						logger.info(`📋 Tool Result:\n${formattedResult}`);
@@ -159,23 +150,21 @@ export class OpenAIService implements ILLMService {
 				}
 			}
 
-			throw new Error(`Maximum iterations (${this.maxIterations}) exceeded`);
+			logger.warn(`Reached maximum iterations (${this.maxIterations}) for task.`);
+			const finalResponse = 'Task completed but reached maximum tool call iterations.';
+			await this.contextManager.addAssistantMessage(finalResponse);
+			return finalResponse;
 		} catch (error) {
-			logger.error('Error in OpenAI service:', error);
-			throw error;
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			logger.error(`Error in Deepseek service: ${errorMessage}`, { error });
+			await this.contextManager.addAssistantMessage(`Error processing request: ${errorMessage}`);
+			return `Error processing request: ${errorMessage}`;
 		}
 	}
 
-	/**
-	 * Direct generate method that bypasses conversation context
-	 * Used for internal tool operations that shouldn't pollute conversation history
-	 * @param userInput - The input to generate a response for
-	 * @param systemPrompt - Optional system prompt to use
-	 * @returns Promise<string> - The generated response
-	 */
 	async directGenerate(userInput: string, systemPrompt?: string): Promise<string> {
 		try {
-			logger.debug('OpenAIService: Direct generate call (bypassing conversation context)', {
+			logger.debug('DeepseekService: Direct generate call (bypassing conversation context)', {
 				inputLength: userInput.length,
 				hasSystemPrompt: !!systemPrompt,
 			});
@@ -204,21 +193,20 @@ export class OpenAIService implements ILLMService {
 
 			const responseText = response.choices[0]?.message?.content || '';
 
-			logger.debug('OpenAIService: Direct generate completed', {
+			logger.debug('DeepseekService: Direct generate completed', {
 				responseLength: responseText.length,
 			});
 
 			return responseText;
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error);
-			logger.error('OpenAIService: Direct generate failed', {
+			logger.error('DeepseekService: Direct generate failed', {
 				error: errorMessage,
 				inputLength: userInput.length,
 			});
-			throw new Error(`Direct generate failed: ${errorMessage}`);
+			throw new Error(`[DeepseekService] Direct generate failed: ${errorMessage}`);
 		}
 	}
-
 	async getAllTools(): Promise<ToolSet | CombinedToolSet> {
 		if (this.unifiedToolManager) {
 			return await this.unifiedToolManager.getAllTools();
@@ -228,21 +216,17 @@ export class OpenAIService implements ILLMService {
 
 	getConfig(): LLMServiceConfig {
 		return {
-			provider: 'openai',
+			provider: 'deepseek',
 			model: this.model,
 		};
 	}
 
-	// Helper methods
-	private async getAIResponseWithRetries(
-		tools: any[],
-		userInput: string
-	): Promise<{ message: any }> {
+	async getAIResponseWithRetries(tools: any[], userInput: string): Promise<{ message: any }> {
 		let attempts = 0;
 		const MAX_ATTEMPTS = 3;
 
 		// Add a log of the number of tools in response
-		logger.debug(`Tools in response: ${tools.length}`);
+		logger.debug(`Tools in response: ${tools?.length || 0}`);
 
 		while (attempts < MAX_ATTEMPTS) {
 			attempts++;
@@ -253,8 +237,8 @@ export class OpenAIService implements ILLMService {
 					content: userInput,
 				});
 
-				// Debug log: Show exactly what messages are being sent to OpenAI
-				logger.debug(`Sending ${formattedMessages.length} formatted messages to OpenAI:`, {
+				// Debug log: Show exactly what messages are being sent to Deepseek
+				logger.debug(`Sending ${formattedMessages.length} formatted messages to Deepseek:`, {
 					messages: formattedMessages.map((msg, idx) => ({
 						index: idx,
 						role: msg.role,
@@ -265,7 +249,7 @@ export class OpenAIService implements ILLMService {
 					})),
 				});
 
-				// Call OpenAI API
+				// Call Deepseek API
 				const response = await this.openai.chat.completions.create({
 					model: this.model,
 					messages: formattedMessages,
@@ -273,19 +257,19 @@ export class OpenAIService implements ILLMService {
 					tool_choice: attempts === 1 ? 'auto' : 'none', // Disable tool choice on retry
 				});
 
-				logger.silly('OPENAI CHAT COMPLETION RESPONSE: ', JSON.stringify(response, null, 2));
+				logger.silly('DEEPSEEK CHAT COMPLETION RESPONSE: ', JSON.stringify(response, null, 2));
 
 				// Get the response message
 				const message = response.choices[0]?.message;
 				if (!message) {
-					throw new Error('Received empty message from OpenAI API');
+					throw new Error('Received empty message from Deepseek API');
 				}
 
 				return { message };
 			} catch (error) {
 				const apiError = error as any;
 				logger.error(
-					`Error in OpenAI API call (Attempt ${attempts}/${MAX_ATTEMPTS}): ${apiError.message || JSON.stringify(apiError, null, 2)}`,
+					`Error in Deepseek API call (Attempt ${attempts}/${MAX_ATTEMPTS}): ${apiError.message || JSON.stringify(apiError, null, 2)}`,
 					{ status: apiError.status, headers: apiError.headers }
 				);
 
@@ -296,7 +280,7 @@ export class OpenAIService implements ILLMService {
 				}
 
 				if (attempts >= MAX_ATTEMPTS) {
-					logger.error(`Failed to get response from OpenAI after ${MAX_ATTEMPTS} attempts.`);
+					logger.error(`Failed to get response from Deepseek after ${MAX_ATTEMPTS} attempts.`);
 					throw error;
 				}
 
@@ -306,10 +290,9 @@ export class OpenAIService implements ILLMService {
 
 		throw new Error('Failed to get response after maximum retry attempts');
 	}
-
-	private formatToolsForOpenAI(tools: ToolSet): any[] {
+	private formatToolsForDeepseek(tools: ToolSet): any[] {
 		// Keep the existing implementation
-		// Convert the ToolSet object to an array of tools in OpenAI's format
+		// Convert the ToolSet object to an array of tools in Deepseek's format
 		return Object.entries(tools).map(([name, tool]) => {
 			return {
 				type: 'function',
