@@ -13,10 +13,10 @@ mcpServers: {}
 
 # Choose ONLY ONE of the following LLM providers
 llm:
-  provider: openai
-  model: gpt-4.1-mini
-  apiKey: $OPENAI_API_KEY
-  maxIterations: 50
+  # provider: openai
+  # model: gpt-4.1-mini
+  # apiKey: $OPENAI_API_KEY
+  # maxIterations: 50
 
   # provider: gemini
   # model: gemini-2.5-flash
@@ -39,6 +39,11 @@ llm:
   # maxIterations: 50
   # qwenOptions:
   #   enableThinking: false
+
+  provider: deepseek
+  model: deepseek-chat
+  apiKey: $DEEPSEEK_API_KEY
+  maxIterations: 50
   
 
 
@@ -77,16 +82,16 @@ llm:
 OpenAI:
 
 embedding:
-  # type: openai
-  # model: text-embedding-3-small
-  # apiKey: $OPENAI_API_KEY
+  type: openai
+  model: text-embedding-3-small
+  apiKey: $OPENAI_API_KEY
 
-  type: ollama
-  model: mxbai-embed-large
-  baseUrl: $OLLAMA_BASE_URL
-  dimensions: 1024
+  # type: ollama
+  # model: mxbai-embed-large
+  # baseUrl: $OLLAMA_BASE_URL
+  # dimensions: 1024
 
-# Gemini:
+# # Gemini:
 # embedding:
 #   type: gemini
 #   model: gemini-embedding-001
@@ -155,6 +160,7 @@ embedding:
 
 # System prompt - User customizable
 # This prompt will be combined with built-in tool usage instructions
+
 systemPrompt:
   enabled: true
   content: |
@@ -164,3 +170,5 @@ systemPrompt:
     - Code review and optimization
     - Explaining complex technical concepts
     - Reasoning through programming challenges
+  
+    You should call each tool at most once per user request unless explicitly instructed otherwise.

@@ -1,4 +1,4 @@
-# Cipher
+# Byterover Cipher
 
 <div align="center">
 
@@ -215,6 +215,14 @@ DISABLE_REFLECTION_MEMORY=true  # default: true
 ## MCP Server Usage
 
 Cipher can run as an MCP (Model Context Protocol) server, allowing integration with MCP-compatible clients like Claude Desktop, Cursor, Windsurf, and other AI coding assistants.
+
+### Installing via Smithery
+
+To install cipher for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@campfirein/cipher):
+
+```bash
+npx -y @smithery/cli install @campfirein/cipher --client claude
+```
 
 ### Quick Setup
 
